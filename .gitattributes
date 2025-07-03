@@ -1,0 +1,13 @@
+# Ignore node modules
+node_modules/
+
+# Ignore environment/config files
+.env
+.config*
+.sessions*
+
+# Ignore log files
+*.log
+
+# Ignore credentials
+settings.js
