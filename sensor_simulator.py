@@ -41,11 +41,15 @@ try:
         speed = random.randint(0, 200)
         temp = random.uniform(60.0, 110.0)
         rpm = random.randint(1000, 5000)
+        tension = random.uniform(0.0, 5.0)
+        power = random.uniform(0.0, 100.0)
 
         sensor_data = {
             "speed" : speed,
             "temp" : temp,
-            "rpm" : rpm
+            "rpm" : rpm,
+            "tension" : tension,
+            "power" : power
         }
 
         message = json.dumps(sensor_data)
