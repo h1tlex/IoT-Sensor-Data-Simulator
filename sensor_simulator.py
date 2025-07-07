@@ -2,6 +2,45 @@ import paho.mqtt.client as mqtt
 import time
 import random
 import json
+import sqlite3
+
+DB_PATH = 'sensor_data.db'
+
+def connect_db():
+    """Fetch records in sequence from the database"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Get total records
+    cursor.execute("SELECT COUNT(*) FROM sensor_readings")
+    total_records = cursor.fetchone()[0]
+    
+    # Initialize position tracker in flow context
+    if not flow.get("current_position"):
+        flow["current_position"] = 0
+
+    current_position = flow.get("current_position")
+    
+    # Fetch next record
+    cursor.execute("SELECT * FROM sensor_readings LIMIT 1 OFFSET ?", (current_position,))
+    record = cursor.fetchone()
+    
+    if record:
+        # Move to next position
+        new_position = (current_position + 1) % total_records  # Loop back to start
+        flow["current_position"] = new_position
+
+        # Map record to data structure
+        return {
+            "id": record[0],
+            "timestamp": record[1],
+            "speed": record[2],
+            "rpm": record[3],
+            "temp": record[4],
+            "tension": record[5]
+        }
+    return None
+
 
 broker = "8d4064e7f56e41488e83453fdffdfc7e.s1.eu.hivemq.cloud" # HiveMQ
 port = 8883
@@ -23,7 +62,6 @@ def on_connect(client, userdata, flags, reason_code, properties):
 def on_publish(client, userdata, mid, reason_code, properties):
     print(f"📤 Published message ID: {mid}")
 
-
 client.on_connect = on_connect
 client.on_publish = on_publish
 
@@ -32,30 +70,29 @@ client.tls_set()
 client.connect(broker,port)
 client.loop_start()
 
+flow = {"current_position": 0}
+
 
 print(f"Connected to broker! Sending messages to topic: {topic}")
 
 try:
     while True:
-        # random sensor data
-        speed = random.randint(0, 200)
-        temp = random.uniform(60.0, 110.0)
-        rpm = random.randint(1000, 5000)
-        tension = random.uniform(0.0, 5.0)
-        power = random.uniform(0.0, 100.0)
+        sensor_data = connect_db()
 
-        sensor_data = {
-            "speed" : speed,
-            "temp" : temp,
-            "rpm" : rpm,
-            "tension" : tension,
-            "power" : power
-        }
-
-        message = json.dumps(sensor_data)
-        client.publish(topic, message)
-        print(f"Sent: {sensor_data}")
-        time.sleep(2)  # Send a message every 2 seconds
+        if sensor_data:
+            payload = {
+                "speed": sensor_data["speed"],
+                "rpm": sensor_data["rpm"],
+                "temp": sensor_data["temp"],
+                "tension": sensor_data["tension"],
+                "power" : sensor_data["speed"]
+            }
+            client.publish(topic, json.dumps(payload))
+            print(f"Sent: {payload}")
+        else:
+            print("No sensor data available in the database.")
+            
+        time.sleep(2)
 except KeyboardInterrupt:
     client.loop_stop()
     client.disconnect()
