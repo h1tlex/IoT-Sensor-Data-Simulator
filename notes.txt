@@ -1,8 +1,0 @@
-HiveMQ Cloud 
-	Username : fourat
-	pw : Fourat2002!!!
-	
-Node-RED
-	Username : Fourat
-	pw : Fourat2002!!!
-	$2y$08$XGKLDE/MPqcPYLv0uecx/.Gvo6mmh.VM3McX159/bdo2Ab1L1CtEy
