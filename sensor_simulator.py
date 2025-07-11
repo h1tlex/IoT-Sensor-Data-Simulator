@@ -37,16 +37,22 @@ def connect_db():
             "speed": record[2],
             "rpm": record[3],
             "temp": record[4],
-            "tension": record[5]
+            "tension": record[5],
+            "power": record[6]
         }
     return None
+
+vehicles = [
+    {"id": "vh001", "type": "bus"},
+    {"id": "vh002", "type": "truck"},
+    {"id": "vh003", "type": "car"}
+]
 
 
 broker = "8d4064e7f56e41488e83453fdffdfc7e.s1.eu.hivemq.cloud" # HiveMQ
 port = 8883
 username = "fourat"
 password = "Fourat2002!!!"
-topic = "actia/intern/test"
 
 client = mqtt.Client(
     mqtt.CallbackAPIVersion.VERSION2,
@@ -73,25 +79,30 @@ client.loop_start()
 flow = {"current_position": 0}
 
 
-print(f"Connected to broker! Sending messages to topic: {topic}")
+print(f"Connected to broker! Publishing sensor data every 2 seconds...")
 
 try:
     while True:
-        sensor_data = connect_db()
+        for vehicle in vehicles:
+            print(f"Processing vehicle: {vehicle['id']} ({vehicle['type']})")
+            sensor_data = connect_db()
 
-        if sensor_data:
-            payload = {
-                "speed": sensor_data["speed"],
-                "rpm": sensor_data["rpm"],
-                "temp": sensor_data["temp"],
-                "tension": sensor_data["tension"],
-                "power" : sensor_data["speed"]
-            }
-            client.publish(topic, json.dumps(payload))
-            print(f"Sent: {payload}")
-        else:
-            print("No sensor data available in the database.")
-            
+            if sensor_data:
+                payload = {
+                    "speed": sensor_data["speed"],
+                    "rpm": sensor_data["rpm"],
+                    "temp": sensor_data["temp"],
+                    "tension": sensor_data["tension"],
+                    "power" : sensor_data["power"]
+                }
+
+                topic = f"actia/fleet/{vehicle['id']}/sensors"
+
+                client.publish(topic, json.dumps(payload))
+                print(f"Sent: {payload} to topic: {topic}")
+            else:
+                print("No sensor data available in the database.")
+                
         time.sleep(2)
 except KeyboardInterrupt:
     client.loop_stop()
