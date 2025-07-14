@@ -1,5 +1,6 @@
 # IoT Sensor Dashboard
 Simulate vehicle/industrial sensor data and stream it via MQTT to a cloud dashboard using HiveMQ and Node-red.
+Currently working with randomized data stored in a local database.
 ## Setup
 1. Install Python dependencies: `pip install paho-mqtt`
 2. Install Node.js dependencies: `npm install`
