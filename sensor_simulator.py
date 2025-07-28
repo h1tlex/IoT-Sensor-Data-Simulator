@@ -103,7 +103,7 @@ try:
             else:
                 print("No sensor data available in the database.")
                 
-        time.sleep(1)
+        time.sleep(2)
 except KeyboardInterrupt:
     client.loop_stop()
     client.disconnect()
