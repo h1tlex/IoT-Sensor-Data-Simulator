@@ -1,4 +1,7 @@
 import can
+import json
+import time
+import os
 
 def connect_can(bus_type='socketcan', channel='can0', bitrate=500000):
     """
@@ -76,9 +79,89 @@ def decrypt_can_message(data):
     """
     if len(data) < 8:
         print("Data length is too short for decryption.")
-        return None, None
+        return None
     
     speed = data[0] # Speed in km/h (1 byte)
     rpm = data[1] | (data[2] << 8) # RPM (2 bytes, little-endian)
+    temp = data[3]
+    tension = data[4] | (data[5] << 8) # Tension (2 bytes, little-endian)
+    power = data[6] | (data[7] << 8) # Power (2 bytes, little-endian)
+
+    return speed, rpm, temp, tension, power
+
+def encode_can_message(rpm, tension, power):
+    """
+    Encode RPM, TENSION and POWER as little-endian (low byte first)
+
+    :param rpm: RPM value.
+    :param tension: Tension value in mV.
+    :param power: Power value in W.
+    :return: Encoded data as little-endian format.
+    """
+    rpm_low = rpm & 0xFF          # Get the lower 8 bits
+    rpm_high = (rpm >> 8) & 0xFF  # Get the upper 8 bits
+
+    tension_low = tension & 0xFF
+    tension_high = (tension >> 8) & 0xFF
+
+    power_low = power & 0xFF
+    power_high = (power >> 8) & 0xFF
+
+    return rpm_low, rpm_high, tension_low, tension_high, power_low, power_high
+
+
+def mqtt_setup(client, broker, port, username, password):
+    """
+    Setup MQTT client with connection and publish callbacks.
+
+    :param client: The MQTT client instance.
+    :param broker: The MQTT broker address.
+    :param port: The port to connect to the broker.
+    :param username: Username for MQTT authentication.
+    :param password: Password for MQTT authentication.
+    """
     
-    return speed, rpm
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            print("✅ Connected to MQTT Broker!")
+        else:
+            print(f"❌ Connection failed. Code: {reason_code}")
+
+    def on_publish(client, userdata, mid, reason_code, properties):
+        print(f"📤 Published message ID: {mid}")
+
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+
+    client.username_pw_set(username, password)
+    client.tls_set()
+    client.connect(broker, port)
+
+def mqtt_start(client, pipepath):
+    """
+    Sends data payload via mqtt to node-red dashboard.
+
+    :param client: The MQTT client instance.
+    """
+    while True:
+        with open(pipepath, "r") as pipe:
+            line = pipe.readline()
+            entry = json.loads(line.strip())
+            if line:
+                payload = {
+                    "speed": entry["speed"],
+                    "rpm": entry["rpm"],
+                    "temp": entry["temp"],
+                    "tension": entry["tension"],
+                    "power": entry["power"]
+                }
+
+                topic = "actia/fleet/vh001/sensors"
+
+                client.publish(topic, json.dumps(payload))
+                print(f"Sent: {payload} to topic: {topic}")
+            else:
+                print("No data available.")
+                break
+    return
+        

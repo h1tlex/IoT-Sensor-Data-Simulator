@@ -1,6 +1,6 @@
+from ..utils import mqtt_setup
 import paho.mqtt.client as mqtt
 import time
-import random
 import json
 import sqlite3
 
@@ -48,7 +48,6 @@ vehicles = [
     {"id": "vh003", "type": "car"}
 ]
 
-
 broker = "8d4064e7f56e41488e83453fdffdfc7e.s1.eu.hivemq.cloud" # HiveMQ
 port = 8883
 username = "fourat"
@@ -59,26 +58,9 @@ client = mqtt.Client(
     client_id="python-sensor-simulator"
 )
 
-def on_connect(client, userdata, flags, reason_code, properties):
-    if reason_code == 0:
-        print("✅ Connected to MQTT Broker!")
-    else:
-        print(f"❌ Connection failed. Code: {reason_code}")
-
-def on_publish(client, userdata, mid, reason_code, properties):
-    print(f"📤 Published message ID: {mid}")
-
-client.on_connect = on_connect
-client.on_publish = on_publish
-
-client.username_pw_set(username,password)
-client.tls_set()
-client.connect(broker,port)
+mqtt_setup(client, broker, port, username, password)
 client.loop_start()
-
 flow = {"current_position": 0}
-
-
 print(f"Connected to broker! Publishing sensor data every 2 seconds...")
 
 try:
@@ -102,7 +84,6 @@ try:
                 print(f"Sent: {payload} to topic: {topic}")
             else:
                 print("No sensor data available in the database.")
-                
         time.sleep(2)
 except KeyboardInterrupt:
     client.loop_stop()
