@@ -17,7 +17,6 @@ if __name__ == "__main__":
         username = log.get("username")
         password = log.get("password")
     
-    print(broker, port, username, password)
     # connect mqtt
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2,
@@ -29,7 +28,7 @@ if __name__ == "__main__":
 
     # start communication
     try:
-        mqtt_start(client, pipepath)
+        mqtt_start(client, pipepath,"vh001")
     except KeyboardInterrupt:
         client.loop_stop()
         client.disconnect()

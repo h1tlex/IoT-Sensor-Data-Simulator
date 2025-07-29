@@ -86,6 +86,8 @@ def decrypt_can_message(data):
     temp = data[3]
     tension = data[4] | (data[5] << 8) # Tension (2 bytes, little-endian)
     power = data[6] | (data[7] << 8) # Power (2 bytes, little-endian)
+    
+    print(f"Decrypted Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W")
 
     return speed, rpm, temp, tension, power
 
@@ -128,7 +130,7 @@ def mqtt_setup(client, broker, port, username, password):
             print(f"❌ Connection failed. Code: {reason_code}")
 
     def on_publish(client, userdata, mid, reason_code, properties):
-        print(f"📤 Published message ID: {mid}")
+        print(f"📤 Published message ID: {mid}\n")
 
     client.on_connect = on_connect
     client.on_publish = on_publish
@@ -137,11 +139,13 @@ def mqtt_setup(client, broker, port, username, password):
     client.tls_set()
     client.connect(broker, port)
 
-def mqtt_start(client, pipepath):
+def mqtt_start(client, pipepath="/tmp/can_pipe", vehicle_id="vh001"):
     """
     Sends data payload via mqtt to node-red dashboard.
 
     :param client: The MQTT client instance.
+    :param pipepath: Path to the named pipe for reading CAN data.
+    :param vehicle_id: Vehicle identifier for the MQTT topic (default is "vh001").
     """
     while True:
         with open(pipepath, "r") as pipe:
@@ -156,7 +160,7 @@ def mqtt_start(client, pipepath):
                     "power": entry["power"]
                 }
 
-                topic = "actia/fleet/vh001/sensors"
+                topic = f"actia/fleet/{vehicle_id}/sensors"
 
                 client.publish(topic, json.dumps(payload))
                 print(f"Sent: {payload} to topic: {topic}")
@@ -165,3 +169,30 @@ def mqtt_start(client, pipepath):
                 break
     return
         
+def can_pipe(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
+    """
+    Start CAN communication by sending and receiving messages.
+    
+    :param msg: The can.Message instance to send.
+    :param speed: Speed in km/h.
+    :param rpm: RPM value.
+    :param temp: Temperature in °C.
+    :param tension: Tension in mV.
+    :param power: Power in W.
+    :param pipepath: Path to the named pipe for writing CAN data.
+    """
+    if not os.path.exists(pipepath):
+        os.mkfifo(pipepath)
+    
+    with open(pipepath, "w") as pipe:
+        data = {
+                "id": hex(msg.arbitration_id),
+                "speed": speed,
+                "rpm": rpm,
+                "temp": temp,
+                "tension": tension,
+                "power": power
+            }
+        pipe.write(json.dumps(data) + "\n")
+        pipe.flush()
+        print(f"Data written to pipe \n")

@@ -1,13 +1,8 @@
-from utils import connect_can, send_can_message, receive_can_message, decrypt_can_message, encode_can_message
+from utils import connect_can, send_can_message, receive_can_message, decrypt_can_message, encode_can_message, can_pipe
 import can
 import time
 import json
 import os
-
-pipepath = "/tmp/can_pipe"
-
-if not os.path.exists(pipepath):
-    os.mkfifo(pipepath)
 
 if __name__ == "__main__":
     # virtual CAN bus
@@ -42,20 +37,8 @@ if __name__ == "__main__":
 
             if msg:
                 speed, rpm, temp, tension, power = decrypt_can_message(msg.data)
-                print(f"Decrypted Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W")
                 # comm via pipe
-                with open(pipepath, "w") as pipe:
-                    data = {
-                        "id": hex(msg.arbitration_id),
-                        "speed": speed,
-                        "rpm": rpm,
-                        "temp": temp,
-                        "tension": tension,
-                        "power": power
-                    }
-                    pipe.write(json.dumps(data) + "\n")
-                    pipe.flush()
-                    print(f"Data written to pipe")
+                can_pipe(msg, speed, rpm, temp, tension, power)
                 
         can_bus.shutdown()  # Clean up the bus connection
     else:

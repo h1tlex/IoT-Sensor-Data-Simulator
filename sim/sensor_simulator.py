@@ -1,4 +1,3 @@
-from ..utils import mqtt_setup
 import paho.mqtt.client as mqtt
 import time
 import json
@@ -41,6 +40,33 @@ def connect_db():
             "power": record[6]
         }
     return None
+
+def mqtt_setup(client, broker, port, username, password):
+    """
+    Setup MQTT client with connection and publish callbacks.
+
+    :param client: The MQTT client instance.
+    :param broker: The MQTT broker address.
+    :param port: The port to connect to the broker.
+    :param username: Username for MQTT authentication.
+    :param password: Password for MQTT authentication.
+    """
+    
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            print("✅ Connected to MQTT Broker!")
+        else:
+            print(f"❌ Connection failed. Code: {reason_code}")
+
+    def on_publish(client, userdata, mid, reason_code, properties):
+        print(f"📤 Published message ID: {mid}")
+
+    client.on_connect = on_connect
+    client.on_publish = on_publish
+
+    client.username_pw_set(username, password)
+    client.tls_set()
+    client.connect(broker, port)
 
 vehicles = [
     {"id": "vh001", "type": "bus"},
