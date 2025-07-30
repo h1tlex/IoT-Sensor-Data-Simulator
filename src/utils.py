@@ -1,6 +1,5 @@
 import can
 import json
-import time
 import os
 
 def connect_can(bus_type='socketcan', channel='can0', bitrate=500000):
