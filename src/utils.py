@@ -169,7 +169,7 @@ def mqtt_start(client, pipepath="/tmp/can_pipe", vehicle_id="vh001"):
                 break
     return
         
-def can_pipe(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
+def can_pipe_w(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
     """
     Start CAN communication by sending and receiving messages.
     
@@ -179,8 +179,9 @@ def can_pipe(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
     :param temp: Temperature in °C.
     :param tension: Tension in mV.
     :param power: Power in W.
-    :param pipepath: Path to the named pipe for writing CAN data.
+    :param pipepath: Path to the named pipe for writing CAN data (default "/tmp/can_pipe").
     """
+    connect_pipe(pipepath)
     if not os.path.exists(pipepath):
         os.mkfifo(pipepath)
     
@@ -196,3 +197,33 @@ def can_pipe(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
         pipe.write(json.dumps(data) + "\n")
         pipe.flush()
         print(f"Data written to pipe \n")
+
+def connect_pipe(pipepath="/tmp/can_pipe"):
+    """
+     Connect to a named pipe for reading CAN data.
+
+     :param pipepath: Path to the named pipe for reading CAN data.
+    """
+    if not os.path.exists(pipepath):
+        os.mkfifo(pipepath)
+
+    
+def connect_cloud(cloud_info_path="cloud-info.json"):
+    """
+    Connect to cloud service using information from a JSON file.
+    
+    :param cloud_info_path: Path to the JSON file containing cloud connection info.
+    :return: tuple containing broker, port, username and password.
+    :raises FileNotFoundError: If the cloud info file does not exist.
+    """
+    if not os.path.exists(cloud_info_path):
+        raise FileNotFoundError(f"Cloud info file {cloud_info_path} does not exist.")
+    
+    with open(cloud_info_path) as f:
+        log = json.load(f)
+        broker = log.get("broker")
+        port = log.get("port")
+        username = log.get("username")
+        password = log.get("password")
+
+    return broker, port, username, password

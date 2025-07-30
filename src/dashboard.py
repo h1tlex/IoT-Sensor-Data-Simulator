@@ -1,21 +1,16 @@
-from utils import mqtt_setup, mqtt_start
+from utils import mqtt_setup, mqtt_start, connect_pipe, connect_cloud
 import paho.mqtt.client as mqtt
 import time
 import json
 import os
 
-pipepath = "/tmp/can_pipe"
-if not os.path.exists(pipepath):
-    raise FileNotFoundError(f"Pipe path {pipepath} does not exist.")
-
 if __name__ == "__main__":
+    # connect to named pipe
+    pipepath = "/tmp/can_pipe"
+    connect_pipe(pipepath)
+
     # fetch data from cloud-info.json
-    with open("cloud-info.json") as log_file:
-        log = json.load(log_file)
-        broker = log.get("broker")
-        port = log.get("port")
-        username = log.get("username")
-        password = log.get("password")
+    broker, port, username, password = connect_cloud("cloud-info.json")
     
     # connect mqtt
     client = mqtt.Client(
@@ -28,7 +23,7 @@ if __name__ == "__main__":
 
     # start communication
     try:
-        mqtt_start(client, pipepath,"vh001")
+        mqtt_start(client, pipepath, "vh001")
     except KeyboardInterrupt:
         client.loop_stop()
         client.disconnect()

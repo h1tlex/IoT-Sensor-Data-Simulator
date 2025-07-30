@@ -1,4 +1,4 @@
-from utils import connect_can, send_can_message, receive_can_message, decrypt_can_message, encode_can_message, can_pipe
+from utils import connect_can, send_can_message, receive_can_message, decrypt_can_message, encode_can_message, can_pipe_w
 import can
 import time
 import json
@@ -38,7 +38,7 @@ if __name__ == "__main__":
             if msg:
                 speed, rpm, temp, tension, power = decrypt_can_message(msg.data)
                 # comm via pipe
-                can_pipe(msg, speed, rpm, temp, tension, power)
+                can_pipe_w(msg, speed, rpm, temp, tension, power)
                 
         can_bus.shutdown()  # Clean up the bus connection
     else:
