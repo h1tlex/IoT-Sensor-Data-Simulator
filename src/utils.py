@@ -1,18 +1,20 @@
 import can
 import json
 import os
+import zmq
 
-def connect_can(bus_type='socketcan', channel='can0', bitrate=500000):
+def connect_can(bus_type='socketcan', channel='can0', bitrate=500000, receive_own_messages=True):
     """
     Connect to a CAN bus using the specified parameters.
 
     :param bus_type: Type of CAN bus (default is 'socketcan').
     :param channel: CAN channel to connect to (default is 'can0').
     :param bitrate: Bitrate for the CAN connection (default is 500000).
+    :param receive_own_messages: Whether to receive own messages (default is True for socketcan).
     :return: A can.Bus instance connected to the specified CAN bus.
     """
     try:
-        bus = can.Bus(channel=channel, interface=bus_type, bitrate=bitrate, receive_own_messages=True)
+        bus = can.Bus(channel=channel, interface=bus_type, bitrate=bitrate, receive_own_messages=receive_own_messages)
         print(f"Connected to {bus_type} on {channel} at {bitrate} bps.")
         return bus
     except Exception as e:
@@ -90,6 +92,21 @@ def decrypt_can_message(data):
 
     return speed, rpm, temp, tension, power
 
+def decode_can_rpm(data):
+    """
+    Decode RPM from CAN message data.
+
+    :param data: The data payload of the CAN message.
+    :return: RPM value.
+    """
+    if len(data) < 2:
+        print("Data length is too short for RPM decoding.")
+        return None
+    
+    rpm = data[0] | (data[1] << 8)
+    
+    return rpm
+
 def encode_can_message(rpm, tension, power):
     """
     Encode RPM, TENSION and POWER as little-endian (low byte first)
@@ -110,6 +127,34 @@ def encode_can_message(rpm, tension, power):
 
     return rpm_low, rpm_high, tension_low, tension_high, power_low, power_high
 
+def start_can_communication(can_bus, traffic, client_socket):
+    """
+    Start communication with the CAN bus and send traffic data via IPC.
+    """
+    while True:
+            msg = receive_can_message(can_bus)  
+            data = msg.data
+            if msg.arbitration_id == 0x55d: # RPM message ID
+                traffic['rpm'] = decode_can_rpm(data)
+
+            elif msg.arbitration_id == 0x65d: # Temperature message ID
+                traffic['temp'] = data[0]
+
+            elif msg.arbitration_id == 0x75d: # Speed message ID
+                traffic['speed'] = data[0]
+
+            elif msg.arbitration_id == 0x76d: # Tension message ID
+                traffic['tension'] = data[0]
+
+            if all(traffic[k] is not None for k in ['speed', 'rpm', 'temp', 'tension']):
+                send_ipc_message(client_socket, traffic)
+                traffic.update({
+                    'speed': None,
+                    'rpm': None,
+                    'temp': None,
+                    'tension': None,
+                    'power': 0
+                })
 
 def mqtt_setup(client, broker, port, username, password):
     """
@@ -138,75 +183,34 @@ def mqtt_setup(client, broker, port, username, password):
     client.tls_set()
     client.connect(broker, port)
 
-def mqtt_start(client, pipepath="/tmp/can_pipe", vehicle_id="vh001"):
+def mqtt_start(client, client_socket, vehicle_id="vh001"):
     """
     Sends data payload via mqtt to node-red dashboard.
 
     :param client: The MQTT client instance.
-    :param pipepath: Path to the named pipe for reading CAN data.
+    :param client_socket: The TCP socket to receive data from.
     :param vehicle_id: Vehicle identifier for the MQTT topic (default is "vh001").
     """
     while True:
-        with open(pipepath, "r") as pipe:
-            line = pipe.readline()
-            entry = json.loads(line.strip())
-            if line:
-                payload = {
-                    "speed": entry["speed"],
-                    "rpm": entry["rpm"],
-                    "temp": entry["temp"],
-                    "tension": entry["tension"],
-                    "power": entry["power"]
-                }
-
-                topic = f"actia/fleet/{vehicle_id}/sensors"
-
-                client.publish(topic, json.dumps(payload))
-                print(f"Sent: {payload} to topic: {topic}")
-            else:
-                print("No data available.")
-                break
-    return
-        
-def can_pipe_w(msg, speed, rpm, temp, tension, power, pipepath="/tmp/can_pipe"):
-    """
-    Start CAN communication by sending and receiving messages.
-    
-    :param msg: The can.Message instance to send.
-    :param speed: Speed in km/h.
-    :param rpm: RPM value.
-    :param temp: Temperature in °C.
-    :param tension: Tension in mV.
-    :param power: Power in W.
-    :param pipepath: Path to the named pipe for writing CAN data (default "/tmp/can_pipe").
-    """
-    connect_pipe(pipepath)
-    if not os.path.exists(pipepath):
-        os.mkfifo(pipepath)
-    
-    with open(pipepath, "w") as pipe:
-        data = {
-                "id": hex(msg.arbitration_id),
-                "speed": speed,
-                "rpm": rpm,
-                "temp": temp,
-                "tension": tension,
-                "power": power
+        data = receive_ipc_message(client_socket)
+        if data:
+            payload = {
+                "speed": data["speed"],
+                "rpm": data["rpm"],
+                "temp": data["temp"],
+                "tension": data["tension"],
+                "power": data["power"]
             }
-        pipe.write(json.dumps(data) + "\n")
-        pipe.flush()
-        print(f"Data written to pipe \n")
 
-def connect_pipe(pipepath="/tmp/can_pipe"):
-    """
-     Connect to a named pipe for reading CAN data.
+            topic = f"actia/fleet/{vehicle_id}/sensors"
 
-     :param pipepath: Path to the named pipe for reading CAN data.
-    """
-    if not os.path.exists(pipepath):
-        os.mkfifo(pipepath)
+            client.publish(topic, json.dumps(payload))
+            print(f"Sent: {payload} to topic: {topic}")
+        else:
+            print("No data available.")
+            break
+    return
 
-    
 def connect_cloud(cloud_info_path="cloud-info.json"):
     """
     Connect to cloud service using information from a JSON file.
@@ -226,3 +230,60 @@ def connect_cloud(cloud_info_path="cloud-info.json"):
         password = log.get("password")
 
     return broker, port, username, password
+
+
+#### ZMQ IPC COMMUNICATION ####
+
+def create_ipc_sender():
+    """
+    Create a ZeroMQ PUB socket for sending messages.
+    Used by (main.py)
+    
+    :return: The ZeroMQ PUB socket.
+    """
+    context = zmq.Context()
+    socket = context.socket(zmq.PUB)
+    socket.bind("tcp://*:5555")
+    print("IPC sender created")
+
+    return socket
+
+def create_ipc_receiver():
+    """
+    Create a ZeroMQ SUB socket for receiving messages.
+    Used by (dashboard.py)
+
+    :return: The ZeroMQ SUB socket.
+    """
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
+    socket.connect("tcp://localhost:5555")
+    socket.setsockopt_string(zmq.SUBSCRIBE, "")
+    print("IPC receiver created")
+
+    return socket
+
+def send_ipc_message(socket, data):
+    """
+    Send a message over the ZeroMQ PUB socket.
+    
+    :param socket: The ZeroMQ PUB socket to send the message through.
+    :param data: The data to send.
+    """
+    socket.send_json(data)
+    print(f"Sent IPC message: {data}")
+
+def receive_ipc_message(socket):
+    """
+    Receive a message from the ZeroMQ SUB socket.
+    
+    :param socket: The ZeroMQ SUB socket to receive the message from.
+    :return: The received message or None if an error occurs.
+    """
+    try:
+        data = socket.recv_json()
+        print(f"Received IPC message: {data}")
+        return data
+    except zmq.ZMQError as e:
+        print(f"Failed to receive IPC message: {e}")
+        return None
