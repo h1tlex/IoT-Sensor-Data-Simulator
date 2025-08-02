@@ -24,4 +24,7 @@ if __name__ == "__main__":
         client.loop_stop()
         client.disconnect()
         print("Disconnected.")
+        exit(1)
+
+    exit(0)
 

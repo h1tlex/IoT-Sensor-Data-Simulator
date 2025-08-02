@@ -72,6 +72,7 @@ def send_can_message(bus, message_id, data):
         print(f"Message sent: ID={hex(message_id)}, Data={[hex(x) for x in data]}")
     except Exception as e:
         print(f"Failed to send CAN message: {e}")
+        bus.shutdown()
 
 def receive_can_message(bus):
     """
@@ -94,6 +95,7 @@ def receive_can_message(bus):
             return None
     except Exception as e:
         print(f"Failed to receive CAN message: {e}")
+        bus.shutdown()
         return None
     
 def decrypt_can_message(data):
@@ -113,8 +115,6 @@ def decrypt_can_message(data):
     tension = data[4] | (data[5] << 8) # Tension (2 bytes, little-endian)
     power = data[6] | (data[7] << 8) # Power (2 bytes, little-endian)
     
-    print(f"Decrypted Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W")
-
     return speed, rpm, temp, tension, power
 
 def decode_can_rpm(data):
@@ -168,7 +168,13 @@ def start_physical_can(can_bus, client_socket):
             }
 
     while True:
-            msg = receive_can_message(can_bus)  
+            
+            msg = receive_can_message(can_bus)
+
+            if msg is None:
+                print("Shutting down physical CAN bus.")
+                break
+
             data = msg.data
             if msg.arbitration_id == 0x55d: # RPM message ID
                 traffic['rpm'] = decode_can_rpm(data)
@@ -216,7 +222,7 @@ def start_virtual_can(can_bus, client_socket):
 
         if msg:
             speed, rpm, temp, tension, power = decrypt_can_message(msg.data)
-            print(f" Virtual CAN Data - Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W")
+            print(f" Virtual CAN Data - Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W \n")
             traffic = {
                 'speed' : speed,
                 'rpm' : rpm,
@@ -226,7 +232,8 @@ def start_virtual_can(can_bus, client_socket):
             }
             send_ipc_message(client_socket, traffic)
         else:
-            print("No message received from virtual CAN bus.")
+            print("Shutting down virtual CAN bus.")
+            break
 
 def mqtt_setup(client, broker, port, username, password):
     """

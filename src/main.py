@@ -19,4 +19,8 @@ if __name__ == "__main__":
             start_virtual_can(can_bus, client_socket)
         else:
             start_physical_can(can_bus, client_socket)
-        can_bus.shutdown()  # Clean up the bus connection
+    else:
+        print("Failed to initialize CAN bus. Exiting.")
+        exit(2)
+
+    exit(0)

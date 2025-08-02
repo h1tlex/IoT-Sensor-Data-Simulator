@@ -32,8 +32,13 @@ This project provides a solution for simulating, collecting, and visualizing IoT
 ```
 
 ## CAN connection settings
+```
+Usage: python main.py <can_bus_type> ('v' for virtual, 'p' for physical)
+
+```
 
 **Virtual connection**:
+
 ```python
 
 can_bus = connect_can(
