@@ -2,6 +2,31 @@ import can
 import json
 import os
 import zmq
+import random
+import time
+
+def init_can(can_bus_type):
+    """
+    Initialize the CAN bus based on the type specified.
+    
+    :param can_bus_type: Type of CAN bus ('v' for virtual, 'p' for physical). 
+    """
+    if can_bus_type == 'v':
+        # virtual CAN bus
+        can_bus = connect_can(
+            bus_type = 'virtual',
+            channel = 'PCAN_VIRTUAL0',
+            bitrate = 500000
+        )
+    else:
+            # physical CAN bus
+        can_bus = connect_can(    
+            bus_type='pcan',
+            channel='PCAN_USBBUS1',
+            bitrate=500000
+        )
+    
+    return can_bus
 
 def connect_can(bus_type='socketcan', channel='can0', bitrate=500000, receive_own_messages=True):
     """
@@ -127,10 +152,21 @@ def encode_can_message(rpm, tension, power):
 
     return rpm_low, rpm_high, tension_low, tension_high, power_low, power_high
 
-def start_can_communication(can_bus, traffic, client_socket):
+def start_physical_can(can_bus, client_socket):
     """
-    Start communication with the CAN bus and send traffic data via IPC.
+    Start communication with the PHYSICAL USB/CAN bus and send traffic data via IPC.
+
+    :param can_bus: The can.Bus instance connected to the physical CAN bus.
+    :param client_socket: The ZeroMQ PUB socket to send data through.
     """
+    traffic = {
+                'speed' : None,
+                'rpm' : None,
+                'temp' : None,
+                'tension' : None,
+                'power' : 0
+            }
+
     while True:
             msg = receive_can_message(can_bus)  
             data = msg.data
@@ -155,6 +191,42 @@ def start_can_communication(can_bus, traffic, client_socket):
                     'tension': None,
                     'power': 0
                 })
+
+def start_virtual_can(can_bus, client_socket):
+    """
+    Start communication with the VIRTUAL CAN bus and send traffic data via IPC.
+    The data communicated is randomly generated for simulation purposes.
+
+    :param can_bus: The can.Bus instance connected to the virtual CAN bus.
+    :param client_socket: The ZeroMQ PUB socket to send data through.
+    """
+    while True:
+        speed = random.randint(0, 200)
+        rpm = random.randint(800, 8000)
+        temp = random.randint(0, 100)
+        tension = random.randint(10000, 15000)
+        power = random.randint(0, 800)
+
+        rpm_low, rpm_high, tension_low, tension_high, power_low, power_high = encode_can_message(rpm, tension, power)
+        message_data = [speed, rpm_low, rpm_high, temp, tension_low, tension_high, power_low, power_high]
+
+        send_can_message(can_bus, 0x65d, message_data)
+        time.sleep(1)
+        msg = receive_can_message(can_bus)
+
+        if msg:
+            speed, rpm, temp, tension, power = decrypt_can_message(msg.data)
+            print(f" Virtual CAN Data - Speed: {speed} km/h, RPM: {rpm}, Temp: {temp}°C, Tension: {tension}mV, Power: {power}W")
+            traffic = {
+                'speed' : speed,
+                'rpm' : rpm,
+                'temp' : temp,
+                'tension' : tension,
+                'power' : power
+            }
+            send_ipc_message(client_socket, traffic)
+        else:
+            print("No message received from virtual CAN bus.")
 
 def mqtt_setup(client, broker, port, username, password):
     """
